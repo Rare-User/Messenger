@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RealChat - Мессенджер</title>
+    <style>
+        :root {
+            --primary: #5865f2;
+            --primary-dark: #4752c4;
+            --bg: #36393f;
+            --bg-secondary: #2f3136;
+            --text: #ffffff;
+            --text-secondary: #b9bbbe;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .chat-container {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+            height: 80vh;
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .users-sidebar {
+            background: var(--bg-secondary);
+            padding: 20px;
+            border-right: 1px solid #40444b;
+        }
+
+        .chat-area {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message {
+            padding: 10px 15px;
+            background: var(--bg);
+            border-radius: 8px;
+            max-width: 70%;
+        }
+
+        .message.own {
+            align-self: flex-end;
+            background: var(--primary);
+        }
+
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+
+        .username {
+            font-weight: bold;
+        }
+
+        .time {
+            color: var(--text-secondary);
+        }
+
+        .input-area {
+            padding: 20px;
+            border-top: 1px solid #40444b;
+        }
+
+        .message-input {
+            width: 100%;
+            padding: 15px;
+            background: var(--bg);
+            border: 1px solid #40444b;
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 16px;
+        }
+
+        .login-form {
+            background: var(--bg-secondary);
+            padding: 2rem;
+            border-radius: 10px;
+            max-width: 400px;
+            margin: 100px auto;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            background: var(--bg);
+            border: 1px solid #40444b;
+            border-radius: 4px;
+            color: var(--text);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .user-item {
+            padding: 10px;
+            margin: 5px 0;
+            background: var(--bg);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #57f287;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- Login Screen -->
+        <div id="loginScreen" class="container">
+            <div class="login-form">
+                <h2 style="text-align: center; margin-bottom: 2rem;">💬 RealChat</h2>
+                <div class="form-group">
+                    <input type="text" id="usernameInput" class="form-input" placeholder="Введите ваше имя" maxlength="20">
+                </div>
+                <button class="btn" onclick="login()">Войти в чат</button>
+            </div>
+        </div>
+
+        <!-- Chat Screen -->
+        <div id="chatScreen" class="container" style="display: none;">
+            <div class="header">
+                <h1>💬 RealChat</h1>
+                <p>Онлайн-чат в реальном времени</p>
+            </div>
+            
+            <div class="chat-container">
+                <div class="users-sidebar">
+                    <h3>👥 Участники (<span id="onlineCount">0</span>)</h3>
+                    <div id="usersList"></div>
+                </div>
+                
+                <div class="chat-area">
+                    <div class="messages" id="messagesContainer">
+                        <!-- Сообщения будут здесь -->
+                    </div>
+                    
+                    <div class="input-area">
+                        <input type="text" 
+                               id="messageInput" 
+                               class="message-input" 
+                               placeholder="Написать сообщение..." 
+                               maxlength="500"
+                               disabled>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase configuration (бесплатный план)
+        const firebaseConfig = {
+            apiKey: "AIzaSyC4R6ANRwYYHvLqA2Rw4L6Q3Q2Z2XwY9zM",
+            authDomain: "realchat-github.firebaseapp.com",
+            databaseURL: "https://realchat-github-default-rtdb.firebaseio.com",
+            projectId: "realchat-github",
+            storageBucket: "realchat-github.appspot.com",
+            messagingSenderId: "123456789012",
+            appId: "1:123456789012:web:abcdef123456"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        let currentUser = null;
+
+        function login() {
+            const username = document.getElementById('usernameInput').value.trim();
+            if (!username) {
+                alert('Пожалуйста, введите имя');
+                return;
+            }
+
+            currentUser = {
+                id: generateId(),
+                username: username,
+                timestamp: Date.now()
+            };
+
+            // Сохраняем пользователя в Firebase
+            database.ref('users/' + currentUser.id).set({
+                username: currentUser.username,
+                online: true,
+                lastSeen: Date.now()
+            });
+
+            // Показываем чат
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('chatScreen').style.display = 'block';
+            document.getElementById('messageInput').disabled = false;
+
+            // Загружаем сообщения и пользователей
+            loadMessages();
+            setupListeners();
+        }
+
+        function generateId() {
+            return 'user_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        function setupListeners() {
+            // Слушаем новые сообщения
+            database.ref('messages').on('child_added', (snapshot) => {
+                const message = snapshot.val();
+                addMessageToDOM(message);
+            });
+
+            // Слушаем изменения пользователей
+            database.ref('users').on('value', (snapshot) => {
+                updateUsersList(snapshot.val());
+            });
+
+            // Обработка ввода сообщений
+            document.getElementById('messageInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+
+            // Обновляем онлайн статус каждые 30 секунд
+            setInterval(() => {
+                if (currentUser) {
+                    database.ref('users/' + currentUser.id).update({
+                        lastSeen: Date.now(),
+                        online: true
+                    });
+                }
+            }, 30000);
+
+            // Помечаем как оффлайн при закрытии страницы
+            window.addEventListener('beforeunload', () => {
+                if (currentUser) {
+                    database.ref('users/' + currentUser.id).update({
+                        online: false,
+                        lastSeen: Date.now()
+                    });
+                }
+            });
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+            
+            if (!text || !currentUser) return;
+
+            const message = {
+                id: generateId(),
+                username: currentUser.username,
+                text: text,
+                timestamp: Date.now(),
+                userId: currentUser.id
+            };
+
+            // Сохраняем сообщение в Firebase
+            database.ref('messages/' + message.id).set(message);
+            
+            input.value = '';
+        }
+
+        function addMessageToDOM(message) {
+            const messagesContainer = document.getElementById('messagesContainer');
+            const messageElement = document.createElement('div');
+            
+            const isOwn = message.userId === currentUser.id;
+            messageElement.className = `message ${isOwn ? 'own' : ''}`;
+            
+            const time = new Date(message.timestamp).toLocaleTimeString('ru-RU', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            messageElement.innerHTML = `
+                <div class="message-header">
+                    <span class="username">${message.username}</span>
+                    <span class="time">${time}</span>
+                </div>
+                <div class="message-text">${message.text}</div>
+            `;
+
+            messagesContainer.appendChild(messageElement);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function updateUsersList(users) {
+            const usersList = document.getElementById('usersList');
+            const onlineCount = document.getElementById('onlineCount');
+            
+            if (!users) {
+                usersList.innerHTML = '<div>Нет пользователей онлайн</div>';
+                onlineCount.textContent = '0';
+                return;
+            }
+
+            let onlineUsers = 0;
+            let usersHTML = '';
+
+            for (const userId in users) {
+                const user = users[userId];
+                // Считаем онлайн если был активен в последние 2 минуты
+                const isOnline = user.online && (Date.now() - user.lastSeen < 120000);
+                
+                if (isOnline) onlineUsers++;
+
+                usersHTML += `
+                    <div class="user-item">
+                        <div class="status-dot" style="background: ${isOnline ? '#57f287' : '#747f8d'}"></div>
+                        <span>${user.username}</span>
+                    </div>
+                `;
+            }
+
+            usersList.innerHTML = usersHTML;
+            onlineCount.textContent = onlineUsers;
+        }
+
+        function loadMessages() {
+            // Загружаем последние 50 сообщений
+            database.ref('messages')
+                .orderByChild('timestamp')
+                .limitToLast(50)
+                .once('value')
+                .then((snapshot) => {
+                    const messages = snapshot.val();
+                    if (messages) {
+                        Object.values(messages).forEach(message => {
+                            addMessageToDOM(message);
+                        });
+                    }
+                });
+        }
+    </script>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+</body>
+</html>
